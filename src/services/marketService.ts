@@ -46,7 +46,7 @@ export const fetchMarketData = async (): Promise<MarketData> => {
 
   try {
     // Usa nossa API Route que faz as requisições no servidor
-    const response = await fetch('/api/market');
+    const response = await fetch('/api/market', { cache: 'no-store' });
     
     if (!response.ok) {
       console.error('Falha ao buscar dados de mercado:', response.statusText);
