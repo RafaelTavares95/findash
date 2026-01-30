@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
-import path from 'path';
-import { readJson, writeJson } from '@/lib/jsonStorage';
+import { readJson, writeJson } from '@/lib/storage';
 
-const DATA_PATH = path.join(process.cwd(), 'data', 'reserves.json');
+const RESERVES_FILE = 'reserves.json';
 
 export async function GET(request: Request) {
   try {
@@ -13,7 +12,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'userId is required' }, { status: 400 });
     }
 
-    const allReserves = await readJson<any[]>(DATA_PATH, []);
+    const allReserves = await readJson<any[]>(RESERVES_FILE, []);
     
     // Filter reserves by userId
     const userReserves = allReserves.filter((res: any) => res.userId === userId);
@@ -35,7 +34,7 @@ export async function POST(request: Request) {
     }
 
     const userReserves = await request.json();
-    const allReserves = await readJson<any[]>(DATA_PATH, []);
+    const allReserves = await readJson<any[]>(RESERVES_FILE, []);
 
     // Remove old reserves for this user and add the new ones
     const otherUsersReserves = allReserves.filter((res: any) => res.userId !== userId);
@@ -47,7 +46,7 @@ export async function POST(request: Request) {
 
     const updatedReserves = [...otherUsersReserves, ...reservesWithId];
     
-    await writeJson(DATA_PATH, updatedReserves);
+    await writeJson(RESERVES_FILE, updatedReserves);
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error saving reserves:', error);

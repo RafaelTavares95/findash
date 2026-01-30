@@ -1,9 +1,8 @@
 import { NextResponse } from 'next/server';
-import path from 'path';
 import { randomUUID } from 'crypto';
-import { readJson, writeJson } from '@/lib/jsonStorage';
+import { readJson, writeJson } from '@/lib/storage';
 
-const USERS_PATH = path.join(process.cwd(), 'data', 'users.json');
+const USERS_FILE = 'users.json';
 
 export async function POST(request: Request) {
   try {
@@ -12,7 +11,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Name is required' }, { status: 400 });
     }
 
-    const users = await readJson<any[]>(USERS_PATH, []);
+    const users = await readJson<any[]>(USERS_FILE, []);
 
     // Check if user already exists (case insensitive)
     let user = users.find((u: any) => u && u.name && u.name.toLowerCase() === name.toLowerCase());
@@ -25,7 +24,7 @@ export async function POST(request: Request) {
         createdAt: new Date().toISOString(),
       };
       users.push(user);
-      await writeJson(USERS_PATH, users);
+      await writeJson(USERS_FILE, users);
     }
 
     return NextResponse.json(user);

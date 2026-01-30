@@ -29,7 +29,9 @@ Um dashboard financeiro moderno e elegante construído com Next.js, React, Redux
 ### 🔐 Sistema de Usuários
 - Login simples por nome
 - Dados segregados por usuário
-- Persistência local em JSON
+- Persistência híbrida:
+  - **Desenvolvimento**: Arquivos JSON locais (pasta `data/`)
+  - **Produção (Vercel)**: Vercel Blob Storage
 
 ### 🌐 Internacionalização (i18n)
 - Suporte a Português (pt-BR) e Inglês (en-US)
@@ -48,6 +50,7 @@ Um dashboard financeiro moderno e elegante construído com Next.js, React, Redux
 | **i18next** | Internacionalização |
 | **Lucide React** | Ícones |
 | **React Hot Toast** | Notificações |
+| **Vercel Blob** | Storage em produção |
 
 ## 🚀 Como Executar
 
@@ -113,6 +116,26 @@ findash/
 | `npm run build` | Gera o build de produção |
 | `npm run start` | Inicia o servidor de produção |
 | `npm run lint` | Executa o linter |
+
+## ☁️ Deploy na Vercel
+
+### Configurando o Vercel Blob Storage
+
+1. Acesse seu projeto na [Vercel Dashboard](https://vercel.com/dashboard)
+2. Vá em **Storage** → **Create Database** → **Blob**
+3. Nomeie o blob store como `findash-blob`
+4. Copie o token `BLOB_READ_WRITE_TOKEN`
+5. Adicione a variável de ambiente no seu projeto:
+   - Vá em **Settings** → **Environment Variables**
+   - Adicione `BLOB_READ_WRITE_TOKEN` com o valor copiado
+
+### Variáveis de Ambiente
+
+| Variável | Descrição | Obrigatório |
+|----------|-----------|-------------|
+| `BLOB_READ_WRITE_TOKEN` | Token de acesso ao Vercel Blob | Sim (produção) |
+
+> **Nota**: Em desenvolvimento local, os dados são salvos na pasta `data/`. O Vercel Blob só é usado quando a variável `VERCEL=1` está presente (automaticamente definida pela Vercel).
 
 ## 🎨 Design
 
