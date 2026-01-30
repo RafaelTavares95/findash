@@ -27,12 +27,18 @@ export async function GET() {
   try {
     // Busca cotação atual
     const usdCurrentResponse = await fetch('https://economia.awesomeapi.com.br/json/last/USD-BRL', {
-      cache: 'no-store'
+      cache: 'no-store',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+      }
     });
-    
+
     // Busca histórico dos últimos 7 dias
     const usdHistoryResponse = await fetch('https://economia.awesomeapi.com.br/json/daily/USD-BRL/7', {
-      cache: 'no-store'
+      cache: 'no-store',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+      }
     });
     
     if (usdCurrentResponse.ok) {
@@ -72,7 +78,10 @@ export async function GET() {
   // então simulamos baseado no valor atual
   try {
     const hgResponse = await fetch('https://api.hgbrasil.com/finance?format=json-cors&key=development', {
-      cache: 'no-store'
+      cache: 'no-store',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+      }
     });
     
     if (hgResponse.ok) {
@@ -115,5 +124,11 @@ export async function GET() {
     usd: usdData,
     ibovespa: ibovData,
     hasError
+  }, {
+    headers: {
+      'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0',
+    }
   });
 }

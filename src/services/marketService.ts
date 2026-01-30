@@ -22,7 +22,7 @@ export interface MarketData {
  * - Permite cache no servidor (revalidate)
  */
 export const fetchMarketData = async (): Promise<MarketData> => {
-  // Dados padrão caso a API falhe (7 dias de histórico)
+  // Dados padrão caso tudo falhe
   const defaultDates = Array.from({ length: 7 }, (_, i) => {
     const date = new Date();
     date.setDate(date.getDate() - (6 - i));
@@ -44,33 +44,62 @@ export const fetchMarketData = async (): Promise<MarketData> => {
     },
   };
 
+  let serverData = null;
+  let hasServerError = false;
+
   try {
-    // Usa nossa API Route que faz as requisições no servidor
+    // 1. Tenta buscar da nossa API Route
     const response = await fetch('/api/market', { cache: 'no-store' });
     
-    if (!response.ok) {
-      console.error('Falha ao buscar dados de mercado:', response.statusText);
-      return defaultData;
+    if (response.ok) {
+      const data = await response.json();
+      serverData = data;
+      // Se a API reportar erro interno, marcamos para tentar fallback
+      if (data.hasError) {
+        console.warn('API Route reportou erro parcial, tentando fallback para USD...');
+        hasServerError = true;
+      }
+    } else {
+      hasServerError = true;
     }
-
-    const data = await response.json();
-    
-    return {
-      usd: {
-        current: data.usd.current,
-        change: data.usd.change,
-        history: data.usd.history,
-        dates: data.usd.dates?.length ? data.usd.dates : defaultDates
-      },
-      ibovespa: {
-        current: data.ibovespa.current,
-        change: data.ibovespa.change,
-        history: data.ibovespa.history,
-        dates: data.ibovespa.dates?.length ? data.ibovespa.dates : defaultDates
-      },
-    };
   } catch (error) {
-    console.error('Erro ao buscar dados de mercado:', error);
-    return defaultData;
+    console.error('Erro ao buscar dados de mercado (Server):', error);
+    hasServerError = true;
   }
+
+  // 2. Se a API falhou ou retornou erro, ou o valor parece ser o default (5.42 e 0.15),
+  // tentamos buscar USD direto no cliente (melhor que nada)
+  let usdData = serverData?.usd;
+  
+  const isDefaultValue = usdData && usdData.current === 5.42 && usdData.change === 0.15;
+  
+  if (hasServerError || !usdData || isDefaultValue) {
+    try {
+      console.log('Tentando fetch direto do USD (Client-side Fallback)...');
+      const directResponse = await fetch('https://economia.awesomeapi.com.br/json/last/USD-BRL');
+      
+      if (directResponse.ok) {
+        const directJson = await directResponse.json();
+        const usd = directJson.USDBRL;
+        
+        // Histórico simples simulado já que não temos o endpoint de histórico aqui
+        // ou mantemos o que veio do server se existir
+        usdData = {
+          current: parseFloat(usd.bid),
+          change: parseFloat(usd.pctChange),
+          history: usdData?.history || [parseFloat(usd.bid)], // Mantém histórico se tiver, ou array unitário
+          dates: usdData?.dates || defaultDates
+        };
+      }
+    } catch (clientError) {
+      console.error('Erro no fallback client-side:', clientError);
+      // Se falhar o fallback, usa o do server (mesmo que default) ou o default total
+      usdData = usdData || defaultData.usd;
+    }
+  }
+
+  return {
+    usd: usdData || defaultData.usd,
+    ibovespa: serverData?.ibovespa || defaultData.ibovespa
+  };
 };
