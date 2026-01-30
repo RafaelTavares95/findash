@@ -1,36 +1,132 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# FinDash 💰
 
-## Getting Started
+Um dashboard financeiro moderno e elegante construído com Next.js, React, Redux e Bootstrap.
 
-First, run the development server:
+![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=next.js)
+![React](https://img.shields.io/badge/React-19-61DAFB?logo=react)
+![Redux](https://img.shields.io/badge/Redux-Toolkit-764ABC?logo=redux)
+![Bootstrap](https://img.shields.io/badge/Bootstrap-5.3-7952B3?logo=bootstrap)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript)
+
+## ✨ Funcionalidades
+
+### 📊 Dashboard Principal
+- Visualização de dados de mercado (Dólar Comercial e Ibovespa)
+- Insights e estratégias financeiras
+- Interface responsiva e moderna
+- Atualização automática de dados
+
+### 💼 Controle Financeiro
+- **Criação de Objetivos**: Defina metas financeiras personalizadas
+- **Aportes**: Adicione valores aos seus objetivos
+- **Acompanhamento Visual**: 
+  - 🟢 **Verde** - Objetivo concluído (meta atingida)
+  - 🔵 **Azul** - Em progresso (valor > 0)
+  - ⚪ **Branco** - Não iniciado (valor = 0)
+- **Barra de Progresso**: Visualize a evolução de cada objetivo
+- **Importar/Exportar**: Backup e restauração de dados em JSON
+
+### 🔐 Sistema de Usuários
+- Login simples por nome
+- Dados segregados por usuário
+- Persistência local em JSON
+
+### 🌐 Internacionalização (i18n)
+- Suporte a Português (pt-BR) e Inglês (en-US)
+- Detecção automática do idioma do navegador
+- Seletor de idioma manual
+
+## 🛠️ Stack Tecnológica
+
+| Tecnologia | Uso |
+|------------|-----|
+| **Next.js 15** | Framework React com App Router |
+| **React 19** | Biblioteca de UI |
+| **Redux Toolkit** | Gerenciamento de estado |
+| **React Bootstrap** | Componentes de UI |
+| **TypeScript** | Tipagem estática |
+| **i18next** | Internacionalização |
+| **Lucide React** | Ícones |
+| **React Hot Toast** | Notificações |
+
+## 🚀 Como Executar
+
+### Pré-requisitos
+- Node.js 18+ 
+- npm, yarn, pnpm ou bun
+
+### Instalação
 
 ```bash
+# Clone o repositório
+git clone <url-do-repositorio>
+cd findash
+
+# Instale as dependências
+npm install
+
+# Execute o servidor de desenvolvimento
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Acesse [http://localhost:3000](http://localhost:3000) no seu navegador.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 📁 Estrutura do Projeto
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```
+findash/
+├── data/                    # Dados persistidos (JSON)
+│   ├── reserves.json        # Objetivos financeiros
+│   └── users.json           # Usuários cadastrados
+├── src/
+│   ├── app/                 # App Router (Next.js)
+│   │   ├── api/             # API Routes
+│   │   ├── control/         # Página de controle financeiro
+│   │   ├── globals.css      # Estilos globais
+│   │   └── page.tsx         # Dashboard principal
+│   ├── components/          # Componentes React
+│   │   ├── AuthGuard.tsx    # Proteção de rotas
+│   │   ├── DataPersistence.tsx
+│   │   ├── FinancialInput.tsx
+│   │   ├── LanguageSwitcher.tsx
+│   │   └── Providers.tsx
+│   ├── i18n/                # Configuração de idiomas
+│   │   ├── locales/
+│   │   │   ├── en.json
+│   │   │   └── pt.json
+│   │   └── index.ts
+│   ├── services/            # Serviços externos
+│   └── store/               # Redux Store
+│       ├── slices/
+│       │   ├── reservesSlice.ts
+│       │   └── userSlice.ts
+│       ├── hooks.ts
+│       └── index.ts
+└── public/                  # Assets públicos
+```
 
-## Learn More
+## 📝 Scripts Disponíveis
 
-To learn more about Next.js, take a look at the following resources:
+| Comando | Descrição |
+|---------|-----------|
+| `npm run dev` | Inicia o servidor de desenvolvimento |
+| `npm run build` | Gera o build de produção |
+| `npm run start` | Inicia o servidor de produção |
+| `npm run lint` | Executa o linter |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 🎨 Design
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+O projeto utiliza um design moderno com:
+- Gradientes suaves
+- Glassmorphism
+- Animações sutis
+- Paleta de cores harmoniosa
+- Totalmente responsivo
 
-## Deploy on Vercel
+## 📄 Licença
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Este projeto foi criado para fins de estudo e aprendizado.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+---
+
+Desenvolvido com ❤️ usando Next.js e React
