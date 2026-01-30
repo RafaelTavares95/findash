@@ -58,11 +58,13 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   };
 
   // Prevent hydration mismatch by not rendering anything until mounted
+  // Usamos texto fixo aqui porque a tradução ainda não está sincronizada
+  // entre servidor e cliente neste momento
   if (!isMounted) {
     return (
       <div className="min-vh-100 bg-dark d-flex align-items-center justify-content-center">
         <div className="spinner-border text-primary" role="status">
-          <span className="visually-hidden">{t('common.loading')}</span>
+          <span className="visually-hidden">Loading...</span>
         </div>
       </div>
     );

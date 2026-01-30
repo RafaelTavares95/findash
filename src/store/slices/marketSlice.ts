@@ -6,30 +6,36 @@ interface MarketState {
     current: number;
     change: number;
     history: number[];
+    dates: string[];
   };
   ibovespa: {
     current: number;
     change: number;
     history: number[];
+    dates: string[];
   };
   lastUpdated: string;
   loading: boolean;
   error: string | null;
 }
 
+// Estado inicial com valores estáticos para evitar hydration mismatch
+// Os dados reais serão carregados pela API no useEffect
 const initialState: MarketState = {
   usd: {
-    current: 5.42,
-    change: 0.15,
-    history: [5.38, 5.40, 5.41, 5.42],
+    current: 0,
+    change: 0,
+    history: [],
+    dates: [],
   },
   ibovespa: {
-    current: 128500,
-    change: -0.45,
-    history: [129200, 129000, 128800, 128500],
+    current: 0,
+    change: 0,
+    history: [],
+    dates: [],
   },
-  lastUpdated: new Date().toISOString(),
-  loading: false,
+  lastUpdated: '',
+  loading: true, // Começa como true para mostrar loading
   error: null,
 };
 

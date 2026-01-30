@@ -49,21 +49,49 @@ export default function Home() {
       legend: {
         display: false,
       },
+      tooltip: {
+        enabled: true,
+        backgroundColor: 'rgba(30, 41, 59, 0.95)',
+        padding: 12,
+        cornerRadius: 8,
+        titleFont: { size: 12, weight: 'bold' as const },
+        bodyFont: { size: 14 },
+        displayColors: false,
+      },
     },
     scales: {
-      x: { display: false },
+      x: { 
+        display: true,
+        grid: { display: false },
+        ticks: { 
+          font: { size: 10 },
+          color: '#94a3b8',
+          maxRotation: 0,
+        },
+      },
       y: { display: false },
     },
   };
 
+  // Fallback para quando os dados ainda não carregaram
+  const usdHistory = usd.history?.length ? usd.history : [0];
+  const usdDates = usd.dates?.length ? usd.dates : ['--'];
+  const ibovHistory = ibovespa.history?.length ? ibovespa.history : [0];
+  const ibovDates = ibovespa.dates?.length ? ibovespa.dates : ['--'];
+
   const usdData = {
-    labels: usd.history.map((_: any, i: number) => i),
+    labels: usdDates,
     datasets: [
       {
-        data: usd.history,
+        label: 'Dólar (R$)',
+        data: usdHistory,
         borderColor: '#6366f1',
         borderWidth: 3,
-        pointRadius: 0,
+        pointRadius: 3,
+        pointHoverRadius: 6,
+        pointBackgroundColor: '#6366f1',
+        pointBorderColor: '#fff',
+        pointBorderWidth: 2,
         backgroundColor: 'rgba(99, 102, 241, 0.1)',
         fill: true,
         tension: 0.4,
@@ -72,13 +100,18 @@ export default function Home() {
   };
 
   const ibovData = {
-    labels: ibovespa.history.map((_: any, i: number) => i),
+    labels: ibovDates,
     datasets: [
       {
-        data: ibovespa.history,
+        label: 'Ibovespa (pts)',
+        data: ibovHistory,
         borderColor: '#10b981',
         borderWidth: 3,
-        pointRadius: 0,
+        pointRadius: 3,
+        pointHoverRadius: 6,
+        pointBackgroundColor: '#10b981',
+        pointBorderColor: '#fff',
+        pointBorderWidth: 2,
         backgroundColor: 'rgba(16, 185, 129, 0.1)',
         fill: true,
         tension: 0.4,
@@ -139,7 +172,7 @@ export default function Home() {
                   </div>
                 </div>
               </div>
-              <div style={{ height: '100px', margin: '0 -10px' }}>
+              <div style={{ height: '150px', margin: '0 -10px' }}>
                 <Line options={chartOptions} data={usdData} />
               </div>
             </div>
@@ -166,7 +199,7 @@ export default function Home() {
                   </div>
                 </div>
               </div>
-              <div style={{ height: '100px', margin: '0 -10px' }}>
+              <div style={{ height: '150px', margin: '0 -10px' }}>
                 <Line options={chartOptions} data={ibovData} />
               </div>
             </div>
