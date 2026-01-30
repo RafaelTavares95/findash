@@ -76,19 +76,42 @@ export const fetchMarketData = async (): Promise<MarketData> => {
   if (hasServerError || !usdData || isDefaultValue) {
     try {
       console.log('Tentando fetch direto do USD (Client-side Fallback)...');
-      const directResponse = await fetch('https://economia.awesomeapi.com.br/json/last/USD-BRL');
       
-      if (directResponse.ok) {
-        const directJson = await directResponse.json();
-        const usd = directJson.USDBRL;
+      // Busca cotação atual e histórico em paralelo no cliente
+      const [currentRes, historyRes] = await Promise.all([
+        fetch('https://economia.awesomeapi.com.br/json/last/USD-BRL'),
+        fetch('https://economia.awesomeapi.com.br/json/daily/USD-BRL/7')
+      ]);
+      
+      if (currentRes.ok) {
+        const currentJson = await currentRes.json();
+        const usd = currentJson.USDBRL;
         
-        // Histórico simples simulado já que não temos o endpoint de histórico aqui
-        // ou mantemos o que veio do server se existir
+        let historyValues: number[] = [];
+        let historyDates: string[] = [];
+
+        // Processa o histórico se a requisição foi bem sucedida
+        if (historyRes.ok) {
+           const historyJson = await historyRes.json();
+           // A API retorna do mais recente para o mais antigo
+           const sortedHistory = Array.isArray(historyJson) ? [...historyJson].reverse() : [];
+           
+           historyValues = sortedHistory.map((item: any) => parseFloat(item.bid));
+           historyDates = sortedHistory.map((item: any) => {
+             const date = new Date(parseInt(item.timestamp) * 1000);
+             return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+           });
+        }
+        
+        // Se não conseguiu histórico, usa fallback seguro (array com valor atual ou o que tinha antes)
+        const finalHistory = historyValues.length > 0 ? historyValues : [parseFloat(usd.bid)];
+        const finalDates = historyDates.length > 0 ? historyDates : [new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })];
+
         usdData = {
           current: parseFloat(usd.bid),
           change: parseFloat(usd.pctChange),
-          history: usdData?.history || [parseFloat(usd.bid)], // Mantém histórico se tiver, ou array unitário
-          dates: usdData?.dates || defaultDates
+          history: finalHistory,
+          dates: finalDates
         };
       }
     } catch (clientError) {
