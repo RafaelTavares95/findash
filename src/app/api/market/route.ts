@@ -4,11 +4,6 @@ import { readJson, writeJson } from '@/lib/storage';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-interface HistoricalUSD {
-  bid: string;
-  timestamp: string;
-}
-
 interface MarketHistoryItem {
   date: string;
   value: number;
@@ -70,53 +65,43 @@ export async function GET() {
   
   let currentUsd = 0;
   let currentIbov = 0;
+  let usdChange = 0;
+  let ibovChange = 0;
 
-  // 1. Fetch USD
+  // Fetch dados da HG Brasil (única fonte para USD e Ibovespa)
   try {
-    const usdResponse = await fetch('https://economia.awesomeapi.com.br/json/last/USD-BRL');
-    if (usdResponse.ok) {
-      const json = await usdResponse.json();
-      currentUsd = parseFloat(json.USDBRL.bid);
-      const change = parseFloat(json.USDBRL.pctChange);
-      
-      usdData.current = currentUsd;
-      usdData.change = change;
-      
-      // Se histórico local estiver vazio, tenta preencher com API
-      if (!savedHistory.usd || savedHistory.usd.length === 0) {
-        try {
-          const histResponse = await fetch('https://economia.awesomeapi.com.br/json/daily/USD-BRL/7');
-          if (histResponse.ok) {
-            const histJson: HistoricalUSD[] = await histResponse.json();
-             const sorted = histJson.reverse();
-             savedHistory.usd = sorted.map(item => ({
-               date: new Date(parseInt(item.timestamp) * 1000).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
-               value: parseFloat(item.bid)
-             }));
-          }
-        } catch (e) { console.error('Erro seeding inicial USD:', e); }
-      }
-    }
-  } catch (error) {
-    console.error('Falha ao buscar USD:', error);
-    hasError = true;
-  }
-
-  // 2. Fetch Ibovespa
-  try {
-    const hgResponse = await fetch('https://api.hgbrasil.com/finance?format=json-cors&key=development');
+    const hgResponse = await fetch('https://api.hgbrasil.com/finance?format=json-cors&key=development', {
+      cache: 'no-store'
+    });
+    
     if (hgResponse.ok) {
       const hgJson = await hgResponse.json();
-      if (hgJson.results && hgJson.results.stocks && hgJson.results.stocks.IBOVESPA) {
+      
+      // Extrai dados do USD
+      if (hgJson.results?.currencies?.USD) {
+        const usd = hgJson.results.currencies.USD;
+        currentUsd = usd.buy || 0;
+        usdChange = usd.variation || 0;
+        
+        usdData.current = currentUsd;
+        usdData.change = usdChange;
+      }
+      
+      // Extrai dados do Ibovespa
+      if (hgJson.results?.stocks?.IBOVESPA) {
         const ibov = hgJson.results.stocks.IBOVESPA;
-        currentIbov = ibov.points;
+        currentIbov = ibov.points || 0;
+        ibovChange = ibov.variation || 0;
         
         ibovData.current = currentIbov;
-        ibovData.change = ibov.variation;
+        ibovData.change = ibovChange;
       }
+    } else {
+      console.error('Falha ao buscar dados HG Brasil:', hgResponse.status, hgResponse.statusText);
+      hasError = true;
     }
   } catch (error) {
-    console.error('Falha ao buscar Ibovespa (HG):', error);
+    console.error('Erro ao buscar dados de mercado (HG Brasil):', error);
     hasError = true;
   }
 
@@ -125,7 +110,6 @@ export async function GET() {
   
   if (currentUsd > 0) {
     const newUsdHistory = updateHistoryArray(savedHistory.usd, currentUsd);
-    // Verifica se mudou algo para evitar writes desnecessários (opcional, mas bom pra Blob)
     if (JSON.stringify(newUsdHistory) !== JSON.stringify(savedHistory.usd)) {
       savedHistory.usd = newUsdHistory;
       shouldSave = true;
