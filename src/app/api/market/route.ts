@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { readJson, writeJson } from '@/lib/storage';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -6,6 +7,46 @@ export const revalidate = 0;
 interface HistoricalUSD {
   bid: string;
   timestamp: string;
+}
+
+interface MarketHistoryItem {
+  date: string;
+  value: number;
+}
+
+interface MarketHistoryData {
+  usd: MarketHistoryItem[];
+  ibovespa: MarketHistoryItem[];
+  lastUpdated: string;
+}
+
+const HISTORY_FILE = 'market_history.json';
+
+function getTodayStr() {
+  return new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit' });
+}
+
+function updateHistoryArray(currentHistory: MarketHistoryItem[], currentValue: number): MarketHistoryItem[] {
+  const today = getTodayStr();
+  // Garante que currentHistory seja um array (pode vir indefinido do JSON antigo)
+  const history = Array.isArray(currentHistory) ? [...currentHistory] : [];
+  
+  const existingIndex = history.findIndex(item => item.date === today);
+  
+  if (existingIndex >= 0) {
+    // Atualiza o valor de hoje
+    history[existingIndex].value = currentValue;
+  } else {
+    // Adiciona novo valor
+    history.push({ date: today, value: currentValue });
+  }
+  
+  // Mantém apenas os últimos 7 dias
+  if (history.length > 7) {
+    return history.slice(history.length - 7);
+  }
+  
+  return history;
 }
 
 export async function GET() {
@@ -23,70 +64,100 @@ export async function GET() {
   };
   let hasError = false;
 
-  // 1. Fetch USD atual e histórico dos últimos 7 dias via API Externa
-  try {
-    // Busca cotação atual
-    const usdCurrentResponse = await fetch('https://economia.awesomeapi.com.br/json/last/USD-BRL');
+  // Carrega histórico persistido (Blob ou Local)
+  const defaultHistory: MarketHistoryData = { usd: [], ibovespa: [], lastUpdated: '' };
+  const savedHistory = await readJson<MarketHistoryData>(HISTORY_FILE, defaultHistory);
+  
+  let currentUsd = 0;
+  let currentIbov = 0;
 
-    // Busca histórico dos últimos 7 dias
-    const usdHistoryResponse = await fetch('https://economia.awesomeapi.com.br/json/daily/USD-BRL/7');
-    
-    if (usdCurrentResponse.ok) {
-      const usdCurrentJson = await usdCurrentResponse.json();
-      const usd = usdCurrentJson.USDBRL;
+  // 1. Fetch USD
+  try {
+    const usdResponse = await fetch('https://economia.awesomeapi.com.br/json/last/USD-BRL');
+    if (usdResponse.ok) {
+      const json = await usdResponse.json();
+      currentUsd = parseFloat(json.USDBRL.bid);
+      const change = parseFloat(json.USDBRL.pctChange);
       
-      let historyValues = [] as number[];
-      let historyDates = [] as string[];
+      usdData.current = currentUsd;
+      usdData.change = change;
       
-      // Se conseguiu o histórico, usa os dados reais da API
-      if (usdHistoryResponse.ok) {
-        const historyJson: HistoricalUSD[] = await usdHistoryResponse.json();
-        const sortedHistory = [...historyJson].reverse();
-        
-        historyValues = sortedHistory.map(item => parseFloat(item.bid));
-        historyDates = sortedHistory.map(item => {
-          const date = new Date(parseInt(item.timestamp) * 1000);
-          return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-        });
-      } else {
-        // Fallback se falhar o histórico
-        historyValues = [parseFloat(usd.bid)];
-        historyDates = [new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })];
+      // Se histórico local estiver vazio, tenta preencher com API
+      if (!savedHistory.usd || savedHistory.usd.length === 0) {
+        try {
+          const histResponse = await fetch('https://economia.awesomeapi.com.br/json/daily/USD-BRL/7');
+          if (histResponse.ok) {
+            const histJson: HistoricalUSD[] = await histResponse.json();
+             const sorted = histJson.reverse();
+             savedHistory.usd = sorted.map(item => ({
+               date: new Date(parseInt(item.timestamp) * 1000).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
+               value: parseFloat(item.bid)
+             }));
+          }
+        } catch (e) { console.error('Erro seeding inicial USD:', e); }
       }
-      
-      usdData = {
-        current: parseFloat(usd.bid),
-        change: parseFloat(usd.pctChange),
-        history: historyValues,
-        dates: historyDates
-      };
     }
   } catch (error) {
     console.error('Falha ao buscar USD:', error);
     hasError = true;
   }
 
-  // 2. Fetch Ibovespa (HG Brasil - Apenas atual)
+  // 2. Fetch Ibovespa
   try {
     const hgResponse = await fetch('https://api.hgbrasil.com/finance?format=json-cors&key=development');
-    
     if (hgResponse.ok) {
       const hgJson = await hgResponse.json();
       if (hgJson.results && hgJson.results.stocks && hgJson.results.stocks.IBOVESPA) {
         const ibov = hgJson.results.stocks.IBOVESPA;
+        currentIbov = ibov.points;
         
-        ibovData = {
-          current: ibov.points,
-          change: ibov.variation,
-          history: [], // Histórico será gerado/persistido no Cliente (LocalStorage)
-          dates: []
-        };
+        ibovData.current = currentIbov;
+        ibovData.change = ibov.variation;
       }
     }
   } catch (error) {
     console.error('Falha ao buscar Ibovespa (HG):', error);
     hasError = true;
   }
+
+  // Atualiza histórico e salva se houver novos dados
+  let shouldSave = false;
+  
+  if (currentUsd > 0) {
+    const newUsdHistory = updateHistoryArray(savedHistory.usd, currentUsd);
+    // Verifica se mudou algo para evitar writes desnecessários (opcional, mas bom pra Blob)
+    if (JSON.stringify(newUsdHistory) !== JSON.stringify(savedHistory.usd)) {
+      savedHistory.usd = newUsdHistory;
+      shouldSave = true;
+    }
+  }
+  
+  if (currentIbov > 0) {
+    const newIbovHistory = updateHistoryArray(savedHistory.ibovespa, currentIbov);
+    if (JSON.stringify(newIbovHistory) !== JSON.stringify(savedHistory.ibovespa)) {
+      savedHistory.ibovespa = newIbovHistory;
+      shouldSave = true;
+    }
+  }
+
+  if (shouldSave) {
+    savedHistory.lastUpdated = new Date().toISOString();
+    try {
+      await writeJson(HISTORY_FILE, savedHistory);
+    } catch (e) {
+      console.error('Erro ao salvar no storage:', e);
+    }
+  }
+
+  // Prepara resposta garantindo arrays
+  const safeUsdHist = savedHistory.usd || [];
+  const safeIbovHist = savedHistory.ibovespa || [];
+
+  usdData.history = safeUsdHist.map(item => item.value);
+  usdData.dates = safeUsdHist.map(item => item.date);
+  
+  ibovData.history = safeIbovHist.map(item => item.value);
+  ibovData.dates = safeIbovHist.map(item => item.date);
 
   return NextResponse.json({
     usd: usdData,
