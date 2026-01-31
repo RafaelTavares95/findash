@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import fs from 'fs';
+import path from 'path';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -8,117 +10,167 @@ interface HistoricalUSD {
   timestamp: string;
 }
 
+interface MarketHistoryItem {
+  date: string;
+  value: number;
+}
+
+interface MarketHistoryData {
+  usd: MarketHistoryItem[];
+  ibovespa: MarketHistoryItem[];
+  lastUpdated: string;
+}
+
+const DATA_FILE_PATH = path.join(process.cwd(), 'data', 'market_history.json');
+
+function getTodayStr() {
+  return new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit' });
+}
+
+function ensureDataDir() {
+  const dataDir = path.dirname(DATA_FILE_PATH);
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+  }
+}
+
+function readHistory(): MarketHistoryData {
+  try {
+    ensureDataDir();
+    if (fs.existsSync(DATA_FILE_PATH)) {
+      const fileContent = fs.readFileSync(DATA_FILE_PATH, 'utf-8');
+      return JSON.parse(fileContent);
+    }
+  } catch (error) {
+    console.error('Erro ao ler histórico:', error);
+  }
+  return { usd: [], ibovespa: [], lastUpdated: '' };
+}
+
+function saveHistory(data: MarketHistoryData) {
+  try {
+    ensureDataDir();
+    fs.writeFileSync(DATA_FILE_PATH, JSON.stringify(data, null, 2), 'utf-8');
+  } catch (error) {
+    console.error('Erro ao salvar histórico:', error);
+  }
+}
+
+function updateHistoryArray(currentHistory: MarketHistoryItem[], currentValue: number): MarketHistoryItem[] {
+  const today = getTodayStr();
+  const history = [...currentHistory];
+  
+  const existingIndex = history.findIndex(item => item.date === today);
+  
+  if (existingIndex >= 0) {
+    // Atualiza o valor de hoje
+    history[existingIndex].value = currentValue;
+  } else {
+    // Adiciona novo valor
+    history.push({ date: today, value: currentValue });
+  }
+  
+  // Mantém apenas os últimos 7 dias
+  if (history.length > 7) {
+    return history.slice(history.length - 7);
+  }
+  
+  return history;
+}
+
 export async function GET() {
   let usdData = { 
-    current: 5.42, 
-    change: 0.15, 
-    history: [5.38, 5.39, 5.40, 5.41, 5.42, 5.43, 5.42],
+    current: 0, 
+    change: 0, 
+    history: [] as number[],
     dates: [] as string[]
   };
   let ibovData = { 
-    current: 128500, 
-    change: -0.45, 
-    history: [127500, 128000, 128200, 128800, 129000, 128700, 128500],
+    current: 0, 
+    change: 0, 
+    history: [] as number[],
     dates: [] as string[]
   };
   let hasError = false;
 
-  // 1. Fetch USD atual e histórico dos últimos 7 dias
-  try {
-    // Busca cotação atual
-    const usdCurrentResponse = await fetch('https://economia.awesomeapi.com.br/json/last/USD-BRL', {
-      cache: 'no-store',
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-      }
-    });
+  const savedHistory = readHistory();
+  let currentUsd = 0;
+  let currentIbov = 0;
 
-    // Busca histórico dos últimos 7 dias
-    const usdHistoryResponse = await fetch('https://economia.awesomeapi.com.br/json/daily/USD-BRL/7', {
+  // 1. Fetch USD
+  try {
+    const usdResponse = await fetch('https://economia.awesomeapi.com.br/json/last/USD-BRL', {
       cache: 'no-store',
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-      }
+      headers: { 'User-Agent': 'Mozilla/5.0' }
     });
     
-    if (usdCurrentResponse.ok) {
-      const usdCurrentJson = await usdCurrentResponse.json();
-      const usd = usdCurrentJson.USDBRL;
+    if (usdResponse.ok) {
+      const json = await usdResponse.json();
+      currentUsd = parseFloat(json.USDBRL.bid);
+      const change = parseFloat(json.USDBRL.pctChange);
       
-      let historyValues = [5.38, 5.39, 5.40, 5.41, 5.42, 5.43, parseFloat(usd.bid)];
-      let historyDates: string[] = [];
+      usdData.current = currentUsd;
+      usdData.change = change;
       
-      // Se conseguiu o histórico, usa os dados reais
-      if (usdHistoryResponse.ok) {
-        const historyJson: HistoricalUSD[] = await usdHistoryResponse.json();
-        
-        // A API retorna do mais recente para o mais antigo, precisamos inverter
-        const sortedHistory = [...historyJson].reverse();
-        
-        historyValues = sortedHistory.map(item => parseFloat(item.bid));
-        historyDates = sortedHistory.map(item => {
-          const date = new Date(parseInt(item.timestamp) * 1000);
-          return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-        });
+      // Se histórico local estiver vazio, tenta preencher com API (apenas na 1ª vez)
+      if (savedHistory.usd.length === 0) {
+        try {
+          const histResponse = await fetch('https://economia.awesomeapi.com.br/json/daily/USD-BRL/7');
+          if (histResponse.ok) {
+            const histJson: HistoricalUSD[] = await histResponse.json();
+             const sorted = histJson.reverse();
+             savedHistory.usd = sorted.map(item => ({
+               date: new Date(parseInt(item.timestamp) * 1000).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
+               value: parseFloat(item.bid)
+             }));
+          }
+        } catch (e) { console.error('Erro seeding inicial USD:', e); }
       }
-      
-      usdData = {
-        current: parseFloat(usd.bid),
-        change: parseFloat(usd.pctChange),
-        history: historyValues,
-        dates: historyDates
-      };
     }
   } catch (error) {
-    console.error('Falha ao buscar USD:', error);
+    console.error('Erro fetching USD:', error);
     hasError = true;
   }
 
-  // 2. Fetch Ibovespa - HG Brasil não fornece histórico gratuito, 
-  // então simulamos baseado no valor atual
+  // 2. Fetch Ibovespa
   try {
     const hgResponse = await fetch('https://api.hgbrasil.com/finance?format=json-cors&key=development', {
       cache: 'no-store',
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-      }
+      headers: { 'User-Agent': 'Mozilla/5.0' }
     });
     
     if (hgResponse.ok) {
-      const hgJson = await hgResponse.json();
-      if (hgJson.results && hgJson.results.stocks && hgJson.results.stocks.IBOVESPA) {
-        const ibov = hgJson.results.stocks.IBOVESPA;
-        const currentPoints = ibov.points;
-        
-        // Gera histórico simulado baseado no valor atual (variação de ±2%)
-        const simulatedHistory = [];
-        const simulatedDates = [];
-        
-        for (let i = 6; i >= 0; i--) {
-          const date = new Date();
-          date.setDate(date.getDate() - i);
-          simulatedDates.push(date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }));
-          
-          // Variação aleatória de -2% a +2% para simular
-          const variation = 1 + ((Math.random() - 0.5) * 0.04);
-          simulatedHistory.push(Math.round(currentPoints * variation));
-        }
-        
-        // O último valor é o atual
-        simulatedHistory[6] = currentPoints;
-        
-        ibovData = {
-          current: currentPoints,
-          change: ibov.variation,
-          history: simulatedHistory,
-          dates: simulatedDates
-        };
+      const json = await hgResponse.json();
+      if (json.results?.stocks?.IBOVESPA) {
+        currentIbov = json.results.stocks.IBOVESPA.points;
+        ibovData.current = currentIbov;
+        ibovData.change = json.results.stocks.IBOVESPA.variation;
       }
     }
   } catch (error) {
-    console.error('Falha ao buscar Ibovespa:', error);
+    console.error('Erro fetching Ibov:', error);
     hasError = true;
   }
+
+  // Atualiza histórico e salva
+  if (currentUsd > 0) {
+    savedHistory.usd = updateHistoryArray(savedHistory.usd, currentUsd);
+  }
+  if (currentIbov > 0) {
+    savedHistory.ibovespa = updateHistoryArray(savedHistory.ibovespa, currentIbov);
+  }
+  
+  if (currentUsd > 0 || currentIbov > 0) {
+    savedHistory.lastUpdated = new Date().toISOString();
+    saveHistory(savedHistory);
+  }
+
+  // Prepara resposta
+  usdData.history = savedHistory.usd.map(item => item.value);
+  usdData.dates = savedHistory.usd.map(item => item.date);
+  
+  ibovData.history = savedHistory.ibovespa.map(item => item.value);
+  ibovData.dates = savedHistory.ibovespa.map(item => item.date);
 
   return NextResponse.json({
     usd: usdData,
