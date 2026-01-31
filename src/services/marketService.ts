@@ -22,7 +22,7 @@ export interface MarketData {
  * - Permite cache no servidor (revalidate)
  */
 export const fetchMarketData = async (): Promise<MarketData> => {
-  // Dados padrão caso tudo falhe
+  // Dados padrão caso tudo falhe (inicial apenas para estrutura)
   const defaultDates = Array.from({ length: 7 }, (_, i) => {
     const date = new Date();
     date.setDate(date.getDate() - (6 - i));
@@ -54,9 +54,9 @@ export const fetchMarketData = async (): Promise<MarketData> => {
     if (response.ok) {
       const data = await response.json();
       serverData = data;
-      // Se a API reportar erro interno, marcamos para tentar fallback
+      // Se a API reportar erro interno, continuamos mas atentos
       if (data.hasError) {
-        console.warn('API Route reportou erro parcial, tentando fallback para USD...');
+        console.warn('API Route reportou erro parcial.');
         hasServerError = true;
       }
     } else {
@@ -67,62 +67,106 @@ export const fetchMarketData = async (): Promise<MarketData> => {
     hasServerError = true;
   }
 
-  // 2. Se a API falhou ou retornou erro, ou o valor parece ser o default (5.42 e 0.15),
-  // tentamos buscar USD direto no cliente (melhor que nada)
-  let usdData = serverData?.usd;
-  
-  const isDefaultValue = usdData && usdData.current === 5.42 && usdData.change === 0.15;
-  
-  if (hasServerError || !usdData || isDefaultValue) {
+  // Helper para persistência local
+  const updateLocalHistory = (key: string, current: number, currentHist: number[], currentDates: string[], isFromServer: boolean): { history: number[], dates: string[] } => {
+    if (typeof window === 'undefined') return { history: currentHist, dates: currentDates };
+
     try {
-      console.log('Tentando fetch direto do USD (Client-side Fallback)...');
+      const storageKey = `market_history_${key}`;
+      const saved = localStorage.getItem(storageKey);
+      let localData = saved ? JSON.parse(saved) : { history: [], dates: [] };
       
-      // Busca cotação atual e histórico em paralelo no cliente
-      const [currentRes, historyRes] = await Promise.all([
-        fetch('https://economia.awesomeapi.com.br/json/last/USD-BRL'),
-        fetch('https://economia.awesomeapi.com.br/json/daily/USD-BRL/7')
-      ]);
-      
-      if (currentRes.ok) {
-        const currentJson = await currentRes.json();
-        const usd = currentJson.USDBRL;
-        
-        let historyValues: number[] = [];
-        let historyDates: string[] = [];
+      const today = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
 
-        // Processa o histórico se a requisição foi bem sucedida
-        if (historyRes.ok) {
-           const historyJson = await historyRes.json();
-           // A API retorna do mais recente para o mais antigo
-           const sortedHistory = Array.isArray(historyJson) ? [...historyJson].reverse() : [];
-           
-           historyValues = sortedHistory.map((item: any) => parseFloat(item.bid));
-           historyDates = sortedHistory.map((item: any) => {
-             const date = new Date(parseInt(item.timestamp) * 1000);
-             return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-           });
-        }
-        
-        // Se não conseguiu histórico, usa fallback seguro (array com valor atual ou o que tinha antes)
-        const finalHistory = historyValues.length > 0 ? historyValues : [parseFloat(usd.bid)];
-        const finalDates = historyDates.length > 0 ? historyDates : [new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })];
-
-        usdData = {
-          current: parseFloat(usd.bid),
-          change: parseFloat(usd.pctChange),
-          history: finalHistory,
-          dates: finalDates
-        };
+      // Se veio histórico completo do servidor (ex: USD via AwesomeAPI), confiamos mais nele
+      if (isFromServer && currentHist.length > 3) {
+        localData = { history: currentHist, dates: currentDates };
+        localStorage.setItem(storageKey, JSON.stringify(localData));
+        return localData;
       }
-    } catch (clientError) {
-      console.error('Erro no fallback client-side:', clientError);
-      // Se falhar o fallback, usa o do server (mesmo que default) ou o default total
-      usdData = usdData || defaultData.usd;
+
+      // Se não, fazemos append manual
+      const lastDate = localData.dates[localData.dates.length - 1];
+
+      if (lastDate === today) {
+        // Atualiza valor de hoje
+        localData.history[localData.history.length - 1] = current;
+      } else {
+        // Adiciona novo dia
+        localData.dates.push(today);
+        localData.history.push(current);
+      }
+
+      // Mantém janela de 7 dias
+      if (localData.dates.length > 7) {
+        localData.dates = localData.dates.slice(-7);
+        localData.history = localData.history.slice(-7);
+      }
+      
+      // Se tiver vazio ou muito curto, preenche pra tras com o valor atual para nao ficar feio o grafico
+      while (localData.dates.length < 7) {
+         localData.history.unshift(current);
+         localData.dates.unshift("...");
+      }
+
+      localStorage.setItem(storageKey, JSON.stringify(localData));
+      return { history: localData.history, dates: localData.dates };
+
+    } catch (e) {
+      console.error('Erro ao salvar histórico local:', e);
+      return { history: currentHist, dates: currentDates };
     }
+  };
+
+  // --- Processamento USD ---
+  let usdData = serverData?.usd;
+  // Fallback Client-side para USD se falhar server
+  if (!usdData || usdData.current === 0) {
+     try {
+        const [currentRes, historyRes] = await Promise.all([
+          fetch('https://economia.awesomeapi.com.br/json/last/USD-BRL'),
+          fetch('https://economia.awesomeapi.com.br/json/daily/USD-BRL/7')
+        ]);
+        if (currentRes.ok) {
+           const json = await currentRes.json();
+           const histJson = historyRes.ok ? await historyRes.json() : [];
+           const sortedHist = Array.isArray(histJson) ? [...histJson].reverse() : [];
+           
+           usdData = {
+              current: parseFloat(json.USDBRL.bid),
+              change: parseFloat(json.USDBRL.pctChange),
+              history: sortedHist.map((i: any) => parseFloat(i.bid)),
+              dates: sortedHist.map((i: any) => new Date(parseInt(i.timestamp)*1000).toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit'}))
+           };
+        }
+     } catch (e) { console.error(e) }
   }
+  usdData = usdData || defaultData.usd;
+  
+  // Persiste/Atualiza histórico USD
+  // Para USD, se vier da API (server ou client fetch) já vem histórico, então 'isFromServer=true' costuma ser o caso.
+  // Mas garantimos via localStorage também
+  const usdPersisted = updateLocalHistory('usd', usdData.current, usdData.history, usdData.dates, usdData.history.length > 1);
+  usdData.history = usdPersisted.history;
+  usdData.dates = usdPersisted.dates;
+
+
+  // --- Processamento Ibovespa ---
+  let ibovData = serverData?.ibovespa;
+  ibovData = ibovData || defaultData.ibovespa;
+
+  // Persiste/Atualiza histórico Ibovespa
+  // Ibov só tem valor atual vindo do server agora. O histórico deve ser construído localmente.
+  // Se o histórico vindo do server for vazio ou dummy, isFromServer=false para forçar append
+  const hasExternalIbovHistory = ibovData.history && ibovData.history.length > 1 && ibovData.history[0] !== ibovData.history[1];
+  
+  const ibovPersisted = updateLocalHistory('ibov', ibovData.current, ibovData.history, ibovData.dates, !!hasExternalIbovHistory);
+  ibovData.history = ibovPersisted.history;
+  ibovData.dates = ibovPersisted.dates;
+
 
   return {
-    usd: usdData || defaultData.usd,
-    ibovespa: serverData?.ibovespa || defaultData.ibovespa
+    usd: usdData,
+    ibovespa: ibovData
   };
 };
